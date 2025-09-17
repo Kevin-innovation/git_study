@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Git 워크플로우 비주얼 시뮬레이터</title>
+    <style>
+        /* --- 기본 스타일 --- */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+        
+        :root {
+            --color-remote: #f0f6fc;
+            --color-local: #f6f8fa;
+            --color-main: #0969da;
+            --color-feature: #1a7f37;
+            --color-commit: #afb8c1;
+            --border-color: #d0d7de;
+            --text-color: #24292f;
+            --bg-color: #ffffff;
+        }
+
+        /* 공통 컨테이너 폭/여백 규칙: 제목, 버튼, 본문, 로그를 동일 폭으로 */
+        h1, .controls, .process-panel, .main-container, .log-panel, .glossary-panel {
+            width: 100%;
+            max-width: 1200px;
+            padding-left: 15px;
+            padding-right: 15px;
+            margin: 0 auto;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f6f8fa;
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: var(--color-main);
+            border-bottom: 2px solid var(--border-color);
+            padding: 0 15px 10px 15px;
+        }
+
+        /* --- 컨트롤 패널 --- */
+        .controls {
+            background: transparent;
+            padding: 0 15px;
+            border-radius: 0;
+            border: none;
+            box-shadow: none;
+            margin-bottom: 20px;
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(9, minmax(0, 1fr));
+            align-items: stretch;
+            /* 폭/패딩/마진은 공통 규칙으로 관리 */
+        }
+
+        /* 단계 설명 패널 */
+        .process-panel { margin-top: 6px; }
+        .process-card {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px 16px;
+            box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+        }
+        .process-title { margin: 0 0 6px 0; font-weight: 800; color: #0f172a; }
+        .process-text { margin: 0; color: #334155; line-height: 1.6; }
+
+        .controls button {
+            background-color: var(--color-main);
+            color: white;
+            border: none;
+            padding: 10px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.08s ease-out, box-shadow 0.2s;
+            box-shadow: 0 2px 8px rgba(9, 105, 218, 0.25);
+            width: 100%;
+            min-width: 0;
+            white-space: normal;
+            overflow: hidden;
+            text-overflow: clip;
+            min-height: 56px;
+            line-height: 1.3;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+            text-align: center;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+            margin: 15px 0;
+        }
+
+        .controls button:hover:not(:disabled) {
+            background-color: #0366d6;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(9, 105, 218, 0.28);
+        }
+        
+        .controls button:disabled {
+            background-color: #8c959f;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        .controls button:active:not(:disabled) { transform: translateY(0); }
+        .controls button:focus-visible { outline: 2px solid #80bfff; outline-offset: 2px; }
+
+        /* --- 메인 레이아웃 --- */
+        .main-container {
+            display: flex;
+            gap: 20px;
+            /* 폭/패딩/마진은 공통 규칙으로 관리 */
+        }
+
+        .repo-container {
+            flex: 1;
+            background-color: rgba(255,255,255,0.9);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(2, 6, 23, 0.06);
+            backdrop-filter: saturate(140%) blur(2px);
+        }
+
+        .repo-container h2 {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        #remote-repo { background-color: var(--color-remote); }
+        #local-repo { background-color: var(--color-local); }
+
+        /* --- 브랜치 및 커밋 스타일 --- */
+        .branch {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px dashed var(--border-color);
+            border-radius: 6px;
+            background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);
+        }
+        
+        .branch-name {
+            font-weight: 700;
+            padding: 5px 8px;
+            border-radius: 15px;
+            color: white;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        
+        .branch-name.main { background-color: var(--color-main); }
+        .branch-name.feature { background-color: var(--color-feature); }
+
+        .head-badge {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: #fde68a;
+            color: #1f2937;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-align: middle;
+        }
+
+        .commits {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .commit {
+            background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            animation: fadeIn 0.5s;
+            position: relative;
+            color: #0b1220;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(2,6,23,0.12);
+        }
+
+        /* 스테이징 영역 */
+        .staging-area {
+            margin-top: 12px;
+            padding: 10px;
+            border: 1px dashed #94a3b8;
+            background: #f1f5f9;
+            border-radius: 6px;
+        }
+        .staging-title { font-size: 12px; color: #334155; margin: 0 0 6px 0; font-weight: 700; }
+        .staged-item {
+            display: inline-block;
+            padding: 6px 8px;
+            margin: 0 6px 6px 0;
+            font-size: 12px;
+            background: #e2e8f0;
+            color: #0f172a;
+            border-radius: 6px;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* --- 로그 패널 --- */
+        .log-panel {
+            margin-top: 20px;
+            /* 폭/패딩/마진은 공통 규칙으로 관리 */
+        }
+
+        /* 용어 설명 카드 */
+        .glossary-panel {
+            margin-top: 20px;
+            /* 공통 폭 규칙 적용 */
+        }
+        .glossary-card {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 8px 24px rgba(2,6,23,0.06);
+        }
+        .glossary-card h3 { margin: 0 0 10px 0; }
+        .glossary-list { margin: 0; padding-left: 18px; }
+        .glossary-list li { margin: 6px 0; line-height: 1.5; }
+        .glossary-emph { color: var(--color-main); font-weight: 700; font-style: normal; }
+
+        #log-output {
+            background-color: #24292f;
+            color: #c9d1d9;
+            font-family: 'Courier New', Courier, monospace;
+            height: 240px;
+            width: 100%;
+            border-radius: 6px;
+            padding: 15px;
+            overflow-y: scroll;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            white-space: pre-wrap;
+            box-shadow: 0 8px 26px rgba(2, 6, 23, 0.18);
+        }
+        /* 커스텀 스크롤바 */
+        #log-output::-webkit-scrollbar { height: 8px; width: 8px; }
+        #log-output::-webkit-scrollbar-thumb { background: #475569; border-radius: 8px; }
+        #log-output::-webkit-scrollbar-track { background: #1f2937; }
+
+        .log-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .log-title {
+            margin: 0;
+            font-weight: 700;
+        }
+        .log-actions button {
+            background: #374151;
+            color: #e5e7eb;
+            border: 1px solid #475569;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.08s ease-out, box-shadow 0.2s;
+        }
+        .log-actions button:hover { background: #4b5563; }
+        .log-actions button:active { transform: translateY(0.5px); }
+    </style>
+</head>
+<body>
+
+    <h1>Git 워크플로우 비주얼 시뮬레이터</h1>
+
+    <div class="controls" id="controls">
+        <button id="step-0">0. 저장소 생성</button>
+        <button id="step-1" disabled>1. git clone</button>
+        <button id="step-2" disabled>2. git branch</button>
+        <button id="step-3" disabled>3. git checkout</button>
+        <button id="step-4" disabled>4. git commit (UI)</button>
+        <button id="step-5" disabled>5. git commit (Logic)</button>
+        <button id="step-6" disabled>6. git push</button>
+        <button id="step-7" disabled>7. Create Pull Request</button>
+        <button id="step-8" disabled>8. Merge Pull Request</button>
+    </div>
+
+    <div class="process-panel">
+        <div class="process-card">
+            <h3 class="process-title" id="process-title">현재 단계 안내</h3>
+            <p class="process-text" id="process-text">좌측의 버튼을 눌러 단계를 시작하면 여기에 쉬운 비유로 설명이 표시됩니다.</p>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="repo-container" id="remote-repo">
+            <h2>☁️ GitHub 원격 저장소</h2>
+            <div id="remote-content"></div>
+        </div>
+        <div class="repo-container" id="local-repo">
+            <h2>💻 내 컴퓨터 (로컬)</h2>
+            <div id="local-content"></div>
+        </div>
+    </div>
+
+    <div class="log-panel">
+        <div class="log-header">
+            <h3 class="log-title">📜 실행 로그</h3>
+            <div class="log-actions">
+                <button id="clear-log">로그 비우기</button>
+            </div>
+        </div>
+        <div id="log-output"></div>
+    </div>
+
+    <div class="glossary-panel">
+        <div class="glossary-card">
+            <h3>🧭 깃 핵심 용어(일상 비유로 쉽게)</h3>
+            <ul class="glossary-list">
+                <li><strong>HEAD</strong>: 책에서 지금 꽂혀 있는 <span class="glossary-emph">책갈피</span>. 내가 현재 보고 있는 페이지(브랜치의 마지막 상태)를 가리켜요.</li>
+                <li><strong>워킹 디렉터리</strong>: 집 책상 위에 펼쳐 놓은 <span class="glossary-emph">원고</span>. 여기서 실제로 파일을 고칩니다.</li>
+                <li><strong>스테이징 영역(Index)</strong>: 제출 전 필요한 종이만 골라 담아두는 <span class="glossary-emph">서류봉투</span>. <code>git add</code>로 봉투에 넣고, 커밋하면 봉투는 비워져요.</li>
+                <li><strong>커밋</strong>: 현재 상태를 딱 찍어 남기는 <span class="glossary-emph">사진</span>. 설명(메시지)과 함께 앨범(히스토리)에 저장돼요.</li>
+                <li><strong>브랜치</strong>: 같은 이야기의 다른 <span class="glossary-emph">초안</span>. 서로 영향을 덜 주고 각자 내용을 발전시킬 수 있어요.</li>
+                <li><strong>로컬/원격</strong>: 내 컴퓨터 폴더는 <span class="glossary-emph">내 방 서랍</span>, GitHub는 <span class="glossary-emph">클라우드 보관함</span>.</li>
+                <li><strong>push</strong>/<strong>pull</strong>: 서랍의 문서를 클라우드에 <span class="glossary-emph">올리기</span>/<span class="glossary-emph">가져오기</span>.</li>
+                <li><strong>checkout</strong>: 책갈피를 다른 초안으로 옮겨서 <span class="glossary-emph">지금 볼 곳</span>을 바꾸는 것.</li>
+                <li><strong>PR(Merge)</strong>: 내 초안을 팀에 <span class="glossary-emph">검토 요청</span>하고, 괜찮으면 <span class="glossary-emph">본문에 합치기</span>.</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        class GitVisualSimulator {
+            constructor() {
+                this.githubRemote = null;
+                this.localMachine = { repository: null, currentBranch: '', staging: [] };
+                this.logOutput = document.getElementById('log-output');
+                this.clearLogButton = document.getElementById('clear-log');
+                this.processTitle = document.getElementById('process-title');
+                this.processText = document.getElementById('process-text');
+                this.controlButtons = document.querySelectorAll('.controls button');
+                this.currentStep = 0;
+                this.setupEventListeners();
+                this.log('시뮬레이터를 시작하려면 "0. 저장소 생성" 버튼을 클릭하세요.');
+                this.updateProcessDescription(0);
+            }
+
+            log(message) {
+                this.logOutput.innerHTML += `> ${message}\n`;
+                this.logOutput.scrollTop = this.logOutput.scrollHeight; // 자동 스크롤
+            }
+
+            // UI 렌더링 함수
+            render() {
+                const remoteContent = document.getElementById('remote-content');
+                const localContent = document.getElementById('local-content');
+
+                // 원격 저장소 렌더링
+                remoteContent.innerHTML = '';
+                if (this.githubRemote) {
+                    for (const branchName in this.githubRemote.branches) {
+                        remoteContent.innerHTML += this.createBranchHTML(branchName, this.githubRemote.branches[branchName]);
+                    }
+                }
+
+                // 로컬 머신 렌더링
+                localContent.innerHTML = '';
+                if (this.localMachine.repository) {
+                    for (const branchName in this.localMachine.repository.branches) {
+                        const isActive = branchName === this.localMachine.currentBranch;
+                        localContent.innerHTML += this.createBranchHTML(branchName, this.localMachine.repository.branches[branchName], isActive);
+                    }
+                    // 스테이징 영역 시각화
+                    localContent.innerHTML += `
+                        <div class="staging-area">
+                            <p class="staging-title">스테이징 영역 (git add)</p>
+                            <div>${this.localMachine.staging.length ? this.localMachine.staging.map(it => `<span class="staged-item">${it}</span>`).join('') : '<span style="color:#64748b;">비어있음</span>'}</div>
+                        </div>
+                    `;
+                }
+            }
+            
+            createBranchHTML(branchName, commits, isActive = false) {
+                const branchClass = branchName === 'main' ? 'main' : 'feature';
+                const activeStyle = isActive ? 'border: 2px solid #fd8c73;' : '';
+                let commitsHTML = commits.map(commit => `<div class="commit">${commit.message}</div>`).join('');
+                
+                return `
+                    <div class="branch" style="${activeStyle}">
+                        <div class="branch-name ${branchClass}">${branchName}${isActive ? '<span class="head-badge">HEAD</span>' : ''}</div>
+                        <div class="commits">${commitsHTML}</div>
+                    </div>
+                `;
+            }
+            
+            updateButtonStates() {
+                this.controlButtons.forEach((btn, index) => {
+                    btn.disabled = index !== this.currentStep;
+                });
+            }
+
+            updateProcessDescription(stepIndex) {
+                const map = {
+                    0: {
+                        title: '0. 저장소 생성: 작업 앨범 만들기',
+                        text: '새 프로젝트의 빈 앨범을 만드는 단계예요. 사진을 넣을 자리를 마련하는 셈이죠.'
+                    },
+                    1: {
+                        title: '1. git clone: 앨범을 내 방으로 복사',
+                        text: '클라우드 보관함에 있는 앨범을 내 방 책상으로 복사해와요. 이제 내 자리에서 편하게 작업할 수 있어요.'
+                    },
+                    2: {
+                        title: '2. git branch: 새로운 초안 만들기',
+                        text: '본 문서를 건드리지 않고, 별도의 초안(브랜치)을 만들어 안전하게 실험해요.'
+                    },
+                    3: {
+                        title: '3. git checkout: 책갈피 옮기기',
+                        text: '지금 볼/작업할 초안으로 책갈피(HEAD)를 옮겨요.'
+                    },
+                    4: {
+                        title: '4. git commit (UI): 사진 한 장 찍기',
+                        text: '변경 파일을 봉투에 담아(git add) 현재 상태를 사진으로 남겨요. UI 관련 변경을 기록합니다.'
+                    },
+                    5: {
+                        title: '5. git commit (Logic): 또 한 장 찍기',
+                        text: '기능(로직) 변경을 스테이징하고, 메시지와 함께 새로운 사진(커밋)을 추가해요.'
+                    },
+                    6: {
+                        title: '6. git push: 앨범을 클라우드에 올리기',
+                        text: '내 방 서랍의 변경분을 클라우드 보관함(GitHub)에 올려 팀과 공유해요.'
+                    },
+                    7: {
+                        title: '7. Pull Request: 검토 요청 보내기',
+                        text: '내 초안을 본 문서에 합치자고 팀에 요청해요. 리뷰하고 문제가 없으면 병합합니다.'
+                    },
+                    8: {
+                        title: '8. Merge: 본문에 합치기',
+                        text: '검토가 끝난 초안을 메인 문서에 합치고, 임시 초안은 정리해요.'
+                    }
+                };
+                const info = map[stepIndex] || { title: '단계 안내', text: '버튼을 눌러 단계를 진행하세요.' };
+                this.processTitle.textContent = info.title;
+                this.processText.textContent = info.text;
+            }
+
+            // 시뮬레이션 단계별 함수
+            steps = [
+                // Step 0: 저장소 생성
+                () => {
+                    this.log('...원격 저장소를 생성합니다...');
+                    this.githubRemote = {
+                        branches: { 'main': [{ id: 'c1', message: 'Initial commit' }] },
+                        pullRequests: []
+                    };
+                    this.log('✅ "my-project" 원격 저장소가 생성되었습니다.');
+                    this.render();
+                },
+                // Step 1: git clone
+                () => {
+                    this.log("📥 'git clone' 실행: 원격 저장소를 내 컴퓨터로 복제합니다...");
+                    this.localMachine.repository = JSON.parse(JSON.stringify(this.githubRemote));
+                    this.localMachine.currentBranch = 'main';
+                    this.log("✔️ 복제 완료!");
+                    this.render();
+                },
+                // Step 2: git branch
+                () => {
+                    const branchName = 'feature/login';
+                    this.log(`🌿 'git branch ${branchName}' 실행: 새 브랜치를 생성합니다...`);
+                    const currentCommits = this.localMachine.repository.branches[this.localMachine.currentBranch];
+                    this.localMachine.repository.branches[branchName] = [...currentCommits];
+                    this.log(`✔️ '${branchName}' 브랜치가 로컬에 생성되었습니다.`);
+                    this.render();
+                },
+                // Step 3: git checkout
+                () => {
+                    const branchName = 'feature/login';
+                    this.log(`🚀 'git checkout ${branchName}' 실행: 작업 브랜치를 변경합니다...`);
+                    this.localMachine.currentBranch = branchName;
+                    this.log(`✔️ 현재 작업 브랜치는 '${branchName}' 입니다.`);
+                    this.render();
+                },
+                // Step 4: git commit 1
+                () => {
+                    // git add
+                    this.localMachine.staging = ['login.html', 'login.css'];
+                    this.log(`➕ 'git add .' 실행: 변경 파일을 스테이징합니다.`);
+                    this.render();
+                    // git commit
+                    this.log(`💾 'git commit' 실행 (UI 개발)...`);
+                    const newCommit = { id: 'c2', message: 'Feat: 로그인 UI 추가' };
+                    this.localMachine.repository.branches[this.localMachine.currentBranch].push(newCommit);
+                    this.localMachine.staging = [];
+                    this.log(`✔️ 'feature/login' 브랜치에 새 커밋이 추가되었습니다.`);
+                    this.render();
+                },
+                // Step 5: git commit 2
+                () => {
+                    // git add
+                    this.localMachine.staging = ['auth.js'];
+                    this.log(`➕ 'git add auth.js' 실행: 변경 파일을 스테이징합니다.`);
+                    this.render();
+                    // git commit
+                    this.log(`💾 'git commit' 실행 (기능 구현)...`);
+                    const newCommit = { id: 'c3', message: 'Feat: 로그인 기능 구현' };
+                    this.localMachine.repository.branches[this.localMachine.currentBranch].push(newCommit);
+                    this.localMachine.staging = [];
+                    this.log(`✔️ 'feature/login' 브랜치에 새 커밋이 추가되었습니다.`);
+                    this.render();
+                },
+                // Step 6: git push
+                () => {
+                    const branchName = this.localMachine.currentBranch;
+                    this.log(`📤 'git push origin ${branchName}' 실행: 로컬 변경사항을 GitHub에 업로드합니다...`);
+                    this.githubRemote.branches[branchName] = [...this.localMachine.repository.branches[branchName]];
+                    this.log(`✔️ '${branchName}' 브랜치가 원격 저장소에 푸시되었습니다.`);
+                    this.render();
+                },
+                // Step 7: Create Pull Request
+                () => {
+                    this.log(`📬 'feature/login' → 'main'으로 Pull Request를 생성합니다...`);
+                    this.githubRemote.pullRequests.push({ from: 'feature/login', to: 'main', status: 'OPEN' });
+                    this.log(`✔️ PR이 생성되었습니다. 이제 팀원들이 코드를 리뷰할 수 있습니다.`);
+                    // UI 상으로는 큰 변화 없음. 로그로 표현.
+                },
+                // Step 8: Merge Pull Request
+                () => {
+                    this.log(`🤝 PR을 병합합니다...`);
+                    const pr = this.githubRemote.pullRequests.find(p => p.status === 'OPEN');
+                    if (pr) {
+                        const sourceCommits = this.githubRemote.branches[pr.from];
+                        const targetCommits = this.githubRemote.branches[pr.to];
+                        const newCommits = sourceCommits.filter(sc => !targetCommits.some(tc => tc.id === sc.id));
+                        this.githubRemote.branches[pr.to].push(...newCommits);
+                        delete this.githubRemote.branches[pr.from];
+                        pr.status = 'MERGED';
+                        this.log(`✔️ 병합 완료! 'feature/login' 브랜치는 삭제되었습니다.`);
+                        this.render();
+                    }
+                }
+            ];
+
+            setupEventListeners() {
+                this.controlButtons.forEach((button, index) => {
+                    button.addEventListener('click', () => {
+                        if (index === this.currentStep && this.steps[index]) {
+                            this.steps[index]();
+                            this.currentStep++;
+                            this.updateButtonStates();
+                            this.updateProcessDescription(this.currentStep);
+                        }
+                        if (this.currentStep >= this.steps.length) {
+                             this.log("🎉 모든 워크플로우가 완료되었습니다! 다시 시작하려면 페이지를 새로고침하세요.");
+                        }
+                    });
+                });
+                this.updateButtonStates(); // 초기 버튼 상태 설정
+
+                // 로그 비우기
+                this.clearLogButton.addEventListener('click', () => {
+                    this.logOutput.textContent = '';
+                });
+            }
+        }
+        
+        // 시뮬레이터 인스턴스 생성
+        new GitVisualSimulator();
+
+    </script>
+</body>
+</html>
